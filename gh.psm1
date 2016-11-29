@@ -119,5 +119,5 @@ function get-githubrepo {
 		user_and_repo $arg1 $arg2
 	}
 }
-
+set-alias gh get-githubrepo
 export-modulemember -function get-githubrepo -alias gh
