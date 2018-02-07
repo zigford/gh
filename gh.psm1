@@ -1,12 +1,23 @@
-function get-githubrepo {
+function Get-GithubRepo {
+	[CmdLetBinding()]
 	Param(
-		[string]$arg1,
-		[string]$arg2
+		[string]$Search
 	)
 
-	$gitdir = "c:\Scratch\drees\git"
+	
+function Find-Dev {
+    $Locations = 'C:\Jesse\dev','D:\dev','C:\Scratch\drees\git'
+    $i = 0
+    While ((Test-Path -Path $Locations[$i]) -eq $False){
+        $i++
+    }
+    $Locations[$i]
+}
 
-	function localrepos {
+
+	$gitdir = (Find-Dev)
+
+	function Get-LocalRepos {
 		$repolist = @()
 		$allusers = (Get-ChildItem -Directory -Path $gitdir).name
 		foreach ($u in $allusers) {
@@ -55,16 +66,22 @@ function get-githubrepo {
 		return $False
 	}
 
-	function user_and_repo($user, $repo) {
-		$user_path=$gitdir + "\" + $user
-		$repo_path=$user_path + "\" + $repo
+	function Get-GitRepoByUserAndRepo{
+        [CmdLetBinding()]
+        Param(
+            [Parameter(Mandatory=$True)]$UserName,
+            [Parameter(Mandatory=$True)]$RepoName
+        )
+		$user_path=$gitdir + "\" + $UserName
+		$repo_path=$user_path + "\" + $RepoName
+        Write-Verbose "Calculated local repo path is $repo_path"
 
 		if (Test-Path($repo_path)) {
 			cd $repo_path
 			pwd
 		}
 		else {
-			$git_repo_uri = "https://github.com/$user/$repo.git"
+			$git_repo_uri = "https://github.com/$username/$reponame.git"
 			if ( clone_repo $git_repo_uri $user_path $repo_path) {
 				cd $repo_path
 				pwd
@@ -72,11 +89,11 @@ function get-githubrepo {
 		}
 	}
 
-	function find_local_repo($arg1) {
-		$match = @() + ($localrepos | where { $_.repo -eq $arg1 })
-		$match += ($localrepos | where { $_.user -eq $arg1 })
+	function Find-LocalRepo($SearchString) {
+		$match = @() + ($localrepos | where { $_.repo -eq $SearchString })
+		$match += ($localrepos | where { $_.user -eq $SearchString })
 		if ( @($match).length -eq 0 ) {
-			write-warning ("No repos called `'$arg1`'")
+			write-warning ("No repos called `'$SearchString`'")
 			$localrepos
 		}
 		elseif ( @($match).length -eq 1 ) {
@@ -85,7 +102,7 @@ function get-githubrepo {
 			pwd
 		}
 		else {
-			write-warning ("Multiple repos match `'$arg1`'")
+			write-warning ("Multiple repos match `'$SearchString`'")
 			return $match
 		}
 	}
@@ -93,31 +110,39 @@ function get-githubrepo {
 
 	# Main		
 
-	$localrepos = localrepos
+	$localrepos = Get-LocalRepos
 
 	# 0 args, just show all repos
-	if (-not $arg1 -and -not $arg2) {
+	if (-not $Search) {
 		return $localrepos
 	}
 	
 	# 1 arg only
 	# If it is a github repo, clone it
 	# Otherwise search for a local repo with matching USER or REPO name
-	if ($arg1 -and -not $arg2) {
-		if ($arg1 -match 'https://github.com/(?<username>[^/]*)/(?<reponame>.*).git') {
-			$username=$matches['username']
-			$reponame=$matches['reponame']
-			user_and_repo $username $reponame
-		}
-        else {
-		    find_local_repo $arg1
-        }
-	}
 
-	# 2 args: clone from github if necessary, then cd to $gitdir/arg1/arg2
-	if ($arg1 -and $arg2) {
-		user_and_repo $arg1 $arg2
-	}
+	Switch ($Search) {
+		{$_ -match '(http(s|)://|)github.com/(?<username>[^/]*)/(?<reponame>.*)'} {
+            Write-Verbose "Match found on gh url"
+		    $Search -match '(http(s|)://|)github.com/(?<username>[^/]*)/(?<reponame>.*)' | Out-Null
+
+			$UserName=$matches['username']
+			$RepoName=$matches['reponame']
+            Write-Verbose "User: $UserName, Repo: $RepoName"
+		}
+        {$_ -match ','} {
+            Write-Verbose "Match found on ,"
+            $strSplit = $Search -split ','
+            $UserName = $strSplit[0]
+            $RepoName = $strSplit[1]
+        }
+        Default {
+		    Find-LocalRepo -SearchString $Search 
+        }
+    }
+    if ($UserName -and $RepoName) {
+        Get-GitRepoByUserAndRepo -UserName $UserName -RepoName $RepoName
+    }
 }
 set-alias gh get-githubrepo
 export-modulemember -function get-githubrepo -alias gh
